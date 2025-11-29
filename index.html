@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haunted House Horror - Enhanced</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: radial-gradient(circle at center, #100, #000); 
+            color: #f00; 
+            font-family: 'Courier New', monospace; 
+            overflow: hidden;
+            image-rendering: pixelated;
+        }
+        canvas { display: block; cursor: none; }
+        #ui { 
+            position: absolute; top: 10px; left: 10px; z-index: 10; 
+            font-size: 18px; text-shadow: 0 0 15px #f00, 0 0 30px #f00; 
+            animation: flicker 2s infinite;
+        }
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        #instructions { 
+            position: absolute; bottom: 10px; left: 10px; z-index: 10; 
+            font-size: 14px; opacity: 0.8; text-shadow: 0 0 10px #f00;
+        }
+        #restartBtn {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 20; padding: 20px 40px; font-size: 24px; font-weight: bold;
+            background: rgba(200,0,0,0.9); color: #fff; border: 3px solid #f00;
+            border-radius: 10px; cursor: pointer; display: none;
+            text-shadow: 0 0 10px #f00; box-shadow: 0 0 30px #f00;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.05); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        #restartBtn:hover { background: rgba(255,0,0,1); transform: translate(-50%, -50%) scale(1.1); }
+    </style>
+</head>
+<body>
+    <canvas id="game"></canvas>
+    <div id="ui">
+        <div>Score: <span id="score">0</span></div>
+        <div>Level: <span id="level">1</span></div>
+        <div>Reward: <span id="reward">None</span></div>
+    </div>
+    <div id="instructions">
+        Arrow Keys / WASD: Move | Collect Keys | Avoid Ghosts | Click to Start Audio
+    </div>
+    <button id="restartBtn">RESTART NIGHTMARE</button>
+
+    <!-- Multiple Horror Audio Layers + BACKGROUND MUSIC -->
+    <audio id="ambientDrone" loop preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSb7X9bMgSQQm+/q2YAA" type="audio/wav">
+    </audio>
+    <audio id="heartbeat" loop preload="auto">
+        <source src="data:audio/wav;base64,UklGRl4CAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAZGF0YaQBAgACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSb7X9bMgSQQm+/q2YAA" type="audio/wav">
+    </audio>
+    <audio id="backgroundMusic" loop preload="auto">
+        <source src="data:audio/wav;base64,UklGRpQCAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSb7X9bMgSQQm+/q2YAA" type="audio/wav">
+    </audio>
+    <audio id="scream1" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSb7X9bMgSQQm+/q2YAA" type="audio/wav">
+    </audio>
+    <audio id="whisper" preload="auto">
+        <source src="data:audio/wav;base64,UklGRl4CAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAZGF0YaQBAgACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSb7X9bMgSQQm+/q2YAA" type="audio/wav">
+    </audio>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Game State
+        let score = 0, level = 1, reward = 'None';
+        let gameOver = false, keysCollected = 0, totalKeys = 3;
+        let player = { x: 50, y: 50, size: 12, speed: 3 };
+        let ghosts = [];
+        let keys = [];
+        let particles = [];
+        let bloodDrips = [];
+        let screenShake = 0;
+        let flicker = 1;
+        let audioUnlocked = false;
+
+        // Audio
+        const ambientDrone = document.getElementById('ambientDrone');
+        const heartbeat = document.getElementById('heartbeat');
+        const backgroundMusic = document.getElementById('backgroundMusic');
+        const scream1 = document.getElementById('scream1');
+        const whisper = document.getElementById('whisper');
+        const restartBtn = document.getElementById('restartBtn');
+
+        function unlockAudio() {
+            if (!audioUnlocked) {
+                audioUnlocked = true;
+                ambientDrone.play().catch(() => {});
+                heartbeat.play().catch(() => {});
+                backgroundMusic.play().catch(() => {}); // Background music starts
+                backgroundMusic.volume = 0.3; // Lower volume to mix with other sounds
+            }
+        }
+
+        // Input
+        const keysPressed = {};
+        window.addEventListener('keydown', e => {
+            keysPressed[e.key.toLowerCase()] = true;
+            if (e.key.toLowerCase() === 'r' && gameOver) restartGame();
+        });
+        window.addEventListener('keyup', e => keysPressed[e.key.toLowerCase()] = false);
+        canvas.addEventListener('click', unlockAudio);
+        restartBtn.addEventListener('click', restartGame);
+
+        function restartGame() {
+            gameOver = false;
+            score = 0; level = 1; reward = 'None';
+            keysCollected = 0;
+            screenShake = 0;
+            restartBtn.style.display = 'none';
+            initLevel();
+        }
+
+        function initLevel() {
+            ghosts = [];
+            keys = [];
+            particles = [];
+            bloodDrips = [];
+            keysCollected = 0;
+            totalKeys = 3 + level - 1;
+            player.x = 50; player.y = 50;
+
+            // More aggressive ghosts
+            for (let i = 0; i < 3 + level; i++) {
+                ghosts.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 18 + level * 4,
+                    speed: 0.8 + level * 0.4,
+                    predictX: 0, predictY: 0,
+                    phase: Math.random() * Math.PI * 2,
+                    tendrils: []
+                });
+            }
+
+            // Keys
+            for (let i = 0; i < totalKeys; i++) {
+                keys.push({
+                    x: 120 + i * 140 + Math.random() * 80,
+                    y: 120 + Math.random() * (canvas.height - 240),
+                    size: 10,
+                    pulse: 0,
+                    collected: false
+                });
+            }
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            flicker = 0.8 + Math.sin(Date.now() * 0.02) * 0.2;
+            screenShake *= 0.9;
+
+            // Player movement
+            if (keysPressed['arrowleft'] || keysPressed['a']) player.x = Math.max(0, player.x - player.speed);
+            if (keysPressed['arrowright'] || keysPressed['d']) player.x = Math.min(canvas.width, player.x + player.speed);
+            if (keysPressed['arrowup'] || keysPressed['w']) player.y = Math.max(0, player.y - player.speed);
+            if (keysPressed['arrowdown'] || keysPressed['s']) player.y = Math.min(canvas.height, player.y + player.speed);
+
+            // Update ghosts (smarter AI)
+            ghosts.forEach(ghost => {
+                // Predict player position
+                ghost.predictX = player.x + (player.x - ghost.x) * 0.3;
+                ghost.predictY = player.y + (player.y - ghost.y) * 0.3;
+                
+                let dx = ghost.predictX - ghost.x;
+                let dy = ghost.predictY - ghost.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 0) {
+                    let speedBoost = dist < 100 ? 2 : 1;
+                    ghost.x += (dx / dist) * ghost.speed * speedBoost;
+                    ghost.y += (dy / dist) * ghost.speed * speedBoost;
+                }
+                
+                ghost.phase += 0.05;
+                // Blood drips
+                if (Math.random() < 0.1) {
+                    bloodDrips.push({
+                        x: ghost.x + (Math.random() - 0.5) * 30,
+                        y: ghost.y + ghost.size,
+                        vy: 2 + Math.random() * 3,
+                        life: 60
+                    });
+                }
+            });
+
+            // Keys pulse
+            keys.forEach(key => {
+                if (!key.collected) key.pulse += 0.1;
+            });
+
+            // Collect keys
+            keys.forEach((key, i) => {
+                if (!key.collected) {
+                    let pdx = player.x - key.x, pdy = player.y - key.y;
+                    if (Math.sqrt(pdx * pdy + pdy * pdy) < player.size + key.size) {
+                        key.collected = true;
+                        keysCollected++;
+                        score += 15 * level;
+                        
+                        // Explosion particles
+                        for (let p = 0; p < 15; p++) {
+                            particles.push({
+                                x: key.x, y: key.y,
+                                vx: (Math.random() - 0.5) * 12,
+                                vy: (Math.random() - 0.5) * 12,
+                                life: 40,
+                                color: '#ff0'
+                            });
+                        }
+                        whisper.play().catch(() => {});
+                    }
+                }
+            });
+
+            // Update particles
+            particles = particles.filter(p => {
+                p.x += p.vx; p.y += p.vy; p.vx *= 0.98; p.vy *= 0.98; p.life--;
+                p.color = `hsla(${Date.now()*0.1 % 360}, 100%, 50%, ${p.life/40})`;
+                return p.life > 0;
+            });
+
+            // Blood drips
+            bloodDrips = bloodDrips.filter(drop => {
+                drop.y += drop.vy;
+                drop.life--;
+                drop.vy += 0.1;
+                return drop.life > 0 && drop.y < canvas.height;
+            });
+
+            // Dynamic background music speed based on level and tension
+            if (audioUnlocked && backgroundMusic) {
+                let tension = Math.min(2.0, 0.8 + (level * 0.3) + (screenShake * 0.02));
+                backgroundMusic.playbackRate = tension;
+            }
+
+            // Random screams
+            if (Math.random() < 0.005) scream1.play().catch(() => {});
+
+            // Level complete
+            if (keysCollected >= totalKeys) {
+                score += 150 * level;
+                reward = level === 3 ? 'NIGHTMARE SURVIVED!' : `Level ${level} Cleared`;
+                level++;
+                if (level > 3) {
+                    gameOver = true;
+                    reward = `HORROR MASTER! Score: ${score}`;
+                    if (backgroundMusic) backgroundMusic.pause(); // Stop music on victory
+                } else {
+                    initLevel();
+                }
+            }
+
+            // Ghost collision
+            ghosts.forEach(ghost => {
+                let dx = player.x - ghost.x, dy = player.y - ghost.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < player.size + ghost.size / 2) {
+                    gameOver = true;
+                    screenShake = 20;
+                    scream1.play().catch(() => {});
+                    if (backgroundMusic) backgroundMusic.pause(); // Stop music on death
+                    restartBtn.style.display = 'block';
+                }
+            });
+
+            // UI Update
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            document.getElementById('reward').textContent = reward;
+
+            // Heartbeat speed
+            if (audioUnlocked) {
+                heartbeat.playbackRate = 0.8 + (level * 0.2) + (screenShake * 0.01);
+            }
+        }
+
+        function draw() {
+            // Screen shake
+            ctx.save();
+            ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+
+            // Creepy background
+            const bgGradient = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, canvas.width);
+            bgGradient.addColorStop(0, `rgba(20,0,40,${flicker})`);
+            bgGradient.addColorStop(0.3 + level*0.1, `rgba(10,0,10,${flicker*0.9})`);
+            bgGradient.addColorStop(1, 'black');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Blood walls
+            ctx.strokeStyle = `rgba(120,0,0,${flicker * 0.6})`;
+            ctx.lineWidth = 8 + level;
+            ctx.shadowColor = '#800';
+            ctx.shadowBlur = 20;
+            for (let i = 0; i < 12 + level; i++) {
+                ctx.beginPath();
+                let x1 = Math.random() * canvas.width;
+                ctx.moveTo(x1, 0);
+                ctx.lineTo(x1 + (Math.random() - 0.5) * 100, canvas.height);
+                ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+
+            // Blood drips
+            bloodDrips.forEach(drop => {
+                ctx.fillStyle = `rgba(120,0,0,${drop.life/60})`;
+                ctx.fillRect(drop.x - 2, drop.y - 2, 4, drop.life/10);
+            });
+
+            // Keys (pulsing)
+            keys.forEach(key => {
+                if (!key.collected) {
+                    ctx.save();
+                    ctx.translate(key.x, key.y);
+                    ctx.rotate(Math.sin(key.pulse) * 0.1);
+                    let scale = 1 + Math.sin(key.pulse) * 0.3;
+                    ctx.scale(scale, scale);
+                    ctx.shadowColor = '#ff0';
+                    ctx.shadowBlur = 20;
+                    ctx.fillStyle = '#ff0';
+                    ctx.fillRect(-key.size, -key.size, key.size*2, key.size*2);
+                    ctx.restore();
+                }
+            });
+
+            // Particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+            });
+
+            // Ghosts with tendrils and eyes
+            ghosts.forEach(ghost => {
+                ctx.save();
+                ctx.translate(ghost.x, ghost.y);
+                
+                // Ghost body (pulsing)
+                let pulse = 0.3 + Math.sin(Date.now() * 0.01 + ghost.phase) * 0.2;
+                ctx.shadowColor = '#f00';
+                ctx.shadowBlur = 30;
+                ctx.fillStyle = `rgba(100,20,20,${pulse})`;
+                ctx.beginPath();
+                ctx.arc(0, 0, ghost.size * pulse, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Glowing red eyes
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = '#f00';
+                ctx.beginPath();
+                ctx.arc(-ghost.size/4, -ghost.size/6, 5, 0, Math.PI * 2);
+                ctx.arc(ghost.size/4, -ghost.size/6, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Tendrils
+                ctx.strokeStyle = `rgba(150,0,0,${pulse})`;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 10;
+                for (let t = 0; t < 4; t++) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    let angle = (t / 4) * Math.PI * 2 + Date.now() * 0.002;
+                    let len = ghost.size * 0.8;
+                    ctx.lineTo(Math.cos(angle) * len, Math.sin(angle) * len);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            });
+
+            // Player flashlight effect
+            let lightRadius = 80 + level * 20;
+            let lightGradient = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, lightRadius);
+            lightGradient.addColorStop(0, `rgba(255,100,100,${flicker})`);
+            lightGradient.addColorStop(0.7, `rgba(100,0,0,${flicker*0.3})`);
+            lightGradient.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = lightGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Player (red glowing figure)
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.shadowColor = '#f00';
+            ctx.shadowBlur = 25;
+            ctx.fillStyle = '#f00';
+            ctx.beginPath();
+            ctx.arc(0, 0, player.size, 0, Math.PI * 2);
+            ctx.fill();
+            // Eyes
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(-4, -3, 2, 0, Math.PI * 2);
+            ctx.arc(4, -3, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // Game Over
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.9)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#f00';
+                ctx.shadowColor = '#f00';
+                ctx.shadowBlur = 40;
+                ctx.font = 'bold 64px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('YOU ARE DEAD', canvas.width/2, canvas.height/2 - 20);
+                ctx.font = 'bold 32px Courier New';
+                ctx.fillText(`Final Score: ${score}`, canvas.width/2, canvas.height/2 + 50);
+                ctx.shadowBlur = 0;
+            }
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        initLevel();
+        gameLoop();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
